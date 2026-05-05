@@ -1,9 +1,8 @@
-fn main() -> Result<(), Box<dyn std::error::Error›> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
-        .build_server (true)
         .compile(
-            &[ "proto/services.proto"], // Path to your proto file &["proto"],
-            &["proto"],   // Directory where the proto file is located
+            &["proto/services.proto"], // Pastikan path ke file .proto sudah benar
+            &["proto"],                // Folder tempat file .proto berada
         )?;
     Ok(())
 }
