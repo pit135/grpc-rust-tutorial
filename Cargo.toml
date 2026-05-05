@@ -15,7 +15,7 @@ path = "src/grpc_client.rs"
 tonic = "0.7"
 prost = "0.10"
 tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 
-# Tambahkan bagian ini untuk build script
 [build-dependencies]
 tonic-build = "0.7"
