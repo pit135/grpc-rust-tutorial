@@ -1,3 +1,9 @@
+use tonic::transport::Channel;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::io::{self, AsyncBufReadExt};
+
 pub mod services {
     tonic::include_proto!("services");
 }
@@ -5,30 +11,44 @@ pub mod services {
 use services::{
     payment_service_client::PaymentServiceClient, PaymentRequest,
     transaction_service_client::TransactionServiceClient, TransactionRequest,
+    chat_service_client::ChatServiceClient, ChatMessage,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Eksekusi Payment Service
-    let mut payment_client = PaymentServiceClient::connect("http://[::1]:50051").await?;
-    let pay_request = tonic::Request::new(PaymentRequest {
-        user_id: "user_123".to_string(),
-        amount: 100.0,
+    let channel = Channel::from_static("http://[::1]:50051").connect().await?;
+
+    // --- Bagian Chat Service ---
+    let mut client = ChatServiceClient::new(channel);
+    let (tx, rx): (Sender<ChatMessage>, Receiver<ChatMessage>) = mpsc::channel(32);
+
+    // Task untuk membaca input user dari console
+    tokio::spawn(async move {
+        let stdin = io::stdin();
+        let mut reader = io::BufReader::new(stdin).lines();
+
+        while let Ok(Some(line)) = reader.next_line().await {
+            if line.trim().is_empty() { continue; }
+            
+            let message = ChatMessage {
+                user_id: "user_123".to_string(),
+                message: line,
+            };
+
+            if tx.send(message).await.is_err() {
+                eprintln!("Failed to send message to server.");
+                break;
+            }
+        }
     });
-    let pay_response = payment_client.process_payment(pay_request).await?;
-    println!("RESPONSE={:?}", pay_response.into_inner());
 
-    // 2. Eksekusi Transaction Service (Streaming)
-    let mut trans_client = TransactionServiceClient::connect("http://[::1]:50051").await?;
-    let trans_request = tonic::Request::new(TransactionRequest {
-        user_id: "user_123".to_string(),
-    });
+    // Inisialisasi Bidirectional Streaming
+    let request = tonic::Request::new(ReceiverStream::new(rx));
+    let mut response_stream = client.chat(request).await?.into_inner();
 
-    let mut stream = trans_client.get_transaction_history(trans_request).await?.into_inner();
-
-    println!("--- Streaming Transaction History ---");
-    while let Some(transaction) = stream.message().await? {
-        println!("Transaction: {:?}", transaction);
+    println!("Chat system active. Type your message below:");
+    while let Some(response) = response_stream.message().await? {
+        println!("Server says: {:?}", response);
     }
 
     Ok(())
